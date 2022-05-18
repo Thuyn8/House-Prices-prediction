@@ -1,0 +1,546 @@
+---
+title: "house price prediction"
+author: "Thuy Nguyen"
+date: "3/31/2022"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, message= F, warning= F}
+
+library(VIM)
+library(dplyr)
+library(tidyverse)
+library(ggplot2)
+library(corrplot)
+```
+
+
+
+```{r}
+colClasses <- c(ï..Order = "integer",
+                 PID      = "integer",     
+                MS.SubClass = "factor",
+                MS.Zoning = "factor",
+                Lot.Frontage = "numeric",
+                Lot.Area = "numeric",
+                Street = "factor",
+                Alley = "factor",
+                Lot.Shape = "factor",
+                Land.Contour = "factor",
+                Utilities = "factor",
+                Lot.Config = "factor",
+                Land.Slope = "factor",
+                Neighborhood = "factor",
+                Condition.1 = "factor",
+                Condition.2 = "factor",
+                Bldg.Type = "factor",
+                House.Style = "factor",
+                Overall.Qual = "factor",
+                Overall.Cond = "factor",
+                Year.Built = "numeric",
+                Year.Remod.Add = "numeric",
+                Roof.Style = "factor",
+                Roof.Matl = "factor",
+                Exterior.1st = "factor",
+                Exterior.2nd = "factor",
+                Mas.Vnr.Type = "factor",
+                Mas.Vnr.Area = "numeric",
+                Exter.Qual = "factor",
+                Exter.Cond = "factor",
+                Foundation = "factor",
+                Bsmt.Qual = "factor",
+                Bsmt.Cond = "factor",
+                Bsmt.Exposure = "factor",
+                BsmtFin.Type.1 = "factor",
+                BsmtFin.SF.1 = "numeric",
+                BsmtFin.Type.2 = "factor",
+                BsmtFin.SF.2 = "numeric",
+                Bsmt.Unf.SF = "numeric",
+                Total.Bsmt.SF = "numeric",
+                Heating = "factor",
+                Heating.QC = "factor",
+                Central.Air = "factor",
+                Electrical = "factor",
+                X1st.Flr.SF = "numeric",
+              "X2nd.Flr.SF" = "numeric",
+                Low.Qual.Fin.SF = "numeric",
+                Gr.Liv.Area = "numeric",
+                Bsmt.Full.Bath = "factor", # Has NA's
+                Bsmt.Half.Bath = "factor", #
+                Full.Bath = "numeric",
+                Half.Bath = "numeric",
+                Bedroom.AbvGr = "numeric",
+                Kitchen.AbvGr = "numeric",
+                Kitchen.Qual = "factor",
+                TotRms.AbvGrd = "numeric",
+                Functional = "factor",
+                Fireplaces = "numeric",
+                Fireplace.Qu = "factor",
+                Garage.Type = "factor",
+                Garage.Yr.Blt = "numeric", #has NA
+                Garage.Finish = "factor",
+                Garage.Cars = "factor", #?
+                Garage.Area = "numeric",
+                Garage.Qual = "factor",
+                Garage.Cond = "factor",
+                Paved.Drive = "factor",
+                Wood.Deck.SF = "numeric",
+                Open.Porch.SF = "numeric",
+                Enclosed.Porch = "numeric",
+                "X3Ssn.Porch" = "numeric",
+                Screen.Porch = "numeric",
+                Pool.Area = "numeric",
+                Pool.QC = "factor",
+                Fence = "factor",
+                Misc.Feature = "factor",
+                Misc.Val = "numeric",
+                Mo.Sold = "factor",
+                Yr.Sold = "numeric",
+                Sale.Type = "factor",
+                Sale.Condition = "factor",
+                SalePrice = "numeric"
+                )
+house <- read.csv("AmesHousing.csv", na.strings = "", colClasses  = colClasses )
+house <- house[, !(colnames(house) %in% c("ï..Order", "PID"))]
+house_copy <- house
+
+```
+
+# 1. Missing value
+
+```{r}
+head(house)
+```
+
+
+## 1.1 Na values are factor level
+
+
+
+
+ ## Na values are factor level at some columns(following description): NA means none
+ - Alley 
+ - Bsmt.Qual
+ - Bsmt.Cond
+ - Bsmt.Exposure
+ - BsmtFin.Type.1
+ - BsmtFin.Type.2
+ - Garage.Type
+ - Garage.Finish
+ - Garage.Qual
+ - Garage.Cond
+ - FireplaceQu (Fireplace quality) 
+ - PoolQC 
+ - Fence 
+ - MiscFeature 
+
+```{r}
+
+col_na <- names(house_copy)[sapply(house_copy, 
+                                   function(x){sum(!is.na(x) & x == "NA") >0})]
+
+
+na_desc <- NULL
+for (i in col_na){
+  na_desc <- c(na_desc, 
+               rep(i,sum(!is.na(house_copy[,i]) & house_copy[,i]=="NA")))
+}
+
+
+ggplot(aes(as.factor(na_desc), fill = as.factor(na_desc)), data = as.data.frame(na_desc)) + geom_bar() + ggtitle("NA values with description") + xlab("Columns with more than 4 NA") +theme(axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank())
+```
+
+## Fill in None for these column
+
+```{r}
+
+house[, col_na] <-data.frame(lapply(house[,col_na],
+                                    function(x)as.factor(ifelse(x == 'NA', "None", levels(x)[x]))))
+```
+
+## 1.2 Real missing data
+
+```{r}
+
+
+miss.col <- names(house)[sapply(house_copy, function(x){sum(is.na(x)) >0})]
+
+for(i in miss.col){
+  print(paste0(i, " has " , sum(is.na(house_copy[i])), " NAs"))
+}
+
+
+
+na_vec4 <- NULL
+for (i in miss.col){
+    if (sum(is.na(house_copy[i])) <= 4) 
+      na_vec4 <-c(na_vec4, rep("others",sum(is.na(house_copy[i]))))
+      
+    else 
+      na_vec4 <- c(na_vec4, rep(i,sum(is.na(house_copy[i]))))
+}
+
+ggplot(data = as.data.frame(na_vec4),
+       aes(as.factor(na_vec4), fill = as.factor(na_vec4))) + geom_bar() + 
+      ggtitle("Missing data chart") + 
+      xlab("Columns with more than 4 missing data") + 
+      theme(axis.title.x=element_blank(),
+            axis.text.x=element_blank(),
+            axis.ticks.x=element_blank())
+
+```
+
+
+
+## 1.3 Imputation: real missing data
+
+** MasVnrArea, Mas.VN.Area are lost together. Fill in None and 0 corresponding
+```{r}
+
+house$Mas.Vnr.Area[is.na(house$Mas.Vnr.Area)] <- 0
+house$Mas.Vnr.Type[is.na(house$Mas.Vnr.Type)] <- "None"
+
+```
+
+** Garage: No garage means no garage year build
+
+```{r}
+garage <- (house_copy %>% dplyr::select(starts_with("Garage")))[is.na(house_copy$Garage.Yr.Blt),]
+head(garage)
+fac <- Filter(is.factor, garage)
+numer <- garage[, !(colnames(garage) %in% names(fac))]
+
+for (i in 1:nrow(house)){
+  if (is.na(house$Garage.Yr.Blt[i]) & 
+      house$Garage.Type[i]=="None" &
+      house$Garage.Finish[i] =="None" & house$Garage.Qual[i]=="None" & house$Garage.Cond[i] =="None" & house$Garage.Cars[i] ==0 & house$Garage.Area[i] ==0)
+    house$Garage.Yr.Blt[i] <- 0
+  else NA
+
+}
+(house %>% dplyr::select(starts_with("Garage")))[is.na(house$Garage.Yr.Blt),]
+```
+
+
+
+
+```{r}
+
+for(i in miss.col){
+  print(paste0(i, " has " , sum(is.na(house[[i]])), " NAs"))
+}
+
+```
+
+
+
+
+
+## Compute 490 NAs in Lot Frontage by using linear regression
+
+Create new col: time_Sale, time_Garage, time_remodel. Delete year sold, year build, year remodel, garage year built
+```{r}
+house$timeSale <- house$Yr.Sold -house$Year.Built
+house$timeGarage <- house$Yr.Sold - house$Garage.Yr.Blt
+house$timeremodel <- house$Yr.Sold- house$Year.Remod.Add
+#remove id, year built, year sold
+new_house <- house[, !(names(house) %in% c("Yr.Sold","Year.Built", "Garage.Yr.Blt", "Year.Remod.Add"))] 
+```
+
+### Split data into factor dataset and numeric dataset
+
+```{r}
+fac_col <-Filter(is.factor,new_house)
+numeric_col <- new_house[, !(colnames(new_house) %in% names(Filter(is.factor,new_house)))]
+```
+
+
+```{r}
+names(fac_col)
+names(numeric_col)
+temp_num <- numeric_col[, c(1:3,11,26,27,28,29)]
+plot(temp_num, log ="xy")
+
+
+missing <- as.factor(is.na(house$Lot.Frontage))
+for (i in colnames(numeric_col[,-1])){
+  boxplot(numeric_col[,i]~ missing, ylab = i)
+}
+boxplot( temp_num$Lot.Area ~missing)
+tem_fac <- fac_col[,c(2:6,8:10,14,46)]
+sapply(fac_col[,c(2:6,8:10,14,46)], function(x) 
+              ggplot(aes(house$Lot.Frontage~ x, fill= as.factor(is.na(house$Lot.Frontage))) + geom_boxplot()))
+
+ggplot(aes(house$MS.Zoning))
+```
+
+
+
+# Correlation matrix
+```{r}
+house$timeSale <- house$Yr.Sold -house$Year.Built
+house$timeGarage <- house$Yr.Sold - house$Garage.Yr.Blt
+house$timeremodel <- house$Yr.Sold- house$Year.Remod.Add
+#remove id, year built, year sold
+house <- house[, !(names(house) %in% c("Yr.Sold","Year.Built", "Garage.Yr.Blt", "Year.Remod.Add"))] 
+
+```
+
+```{r}
+
+#corrplot(cor(numeric_col, use = "pairwise.complete.obs"), type = "upper")
+
+aggr(fac_col, ylab = c("Histogram of missing data", "Pattern"), sortVars = TRUE)
+aggr(house,gap= 3, numbers = TRUE,ylab = c("Histogram of missing data", "Pattern"), sortVars = TRUE, cex.axis = .5)
+```
+
+
+# Scatter plots
+```{r}
+
+plot(numeric_col)
+corrplot(cor(numeric_col[complete.cases(numeric_col),]), method = "color", type = "upper")
+
+
+plot(house$Lot.Frontage ~ ., data = fac_col)
+
+boxplot(house$SalePrice ~ is.na(house$Lot.Frontage))
+plot(log(house$SalePrice)~ log(house$Lot.Frontage))
+```
+
+
+# Boxplots
+```{r}
+ # data frame of factor variables
+nrow(fac_col)
+data_matrix <-cbind(numeric_col,model.matrix(~.-1, data=fac_col))
+data_matrix <- data_matrix[, !(names(data_matrix) %in% "SalePrice")]
+```
+
+
+# Elastic net regression
+
+```{r}
+
+mod1 <- cv.glmnet(as.matrix(data_matrix), house$SalePrice, alpha= 0)
+
+
+
+```
+
+
+# Appendix
+
+```{r, eval=FALSE}
+
+```
+
+
+```{r}
+
+```{r, eval = FALSE}
+library(VIM)
+library(dplyr)
+library(tidyverse)
+library(ggplot2)
+library(corrplot)
+
+colClasses <- c(ï..Order = "integer",
+                 PID      = "integer",     
+                MS.SubClass = "factor",
+                MS.Zoning = "factor",
+                Lot.Frontage = "numeric",
+                Lot.Area = "numeric",
+                Street = "factor",
+                Alley = "factor",
+                Lot.Shape = "factor",
+                Land.Contour = "factor",
+                Utilities = "factor",
+                Lot.Config = "factor",
+                Land.Slope = "factor",
+                Neighborhood = "factor",
+                Condition.1 = "factor",
+                Condition.2 = "factor",
+                Bldg.Type = "factor",
+                House.Style = "factor",
+                Overall.Qual = "factor",
+                Overall.Cond = "factor",
+                Year.Built = "numeric",
+                Year.Remod.Add = "numeric",
+                Roof.Style = "factor",
+                Roof.Matl = "factor",
+                Exterior.1st = "factor",
+                Exterior.2nd = "factor",
+                Mas.Vnr.Type = "factor",
+                Mas.Vnr.Area = "numeric",
+                Exter.Qual = "factor",
+                Exter.Cond = "factor",
+                Foundation = "factor",
+                Bsmt.Qual = "factor",
+                Bsmt.Cond = "factor",
+                Bsmt.Exposure = "factor",
+                BsmtFin.Type.1 = "factor",
+                BsmtFin.SF.1 = "numeric",
+                BsmtFin.Type.2 = "factor",
+                BsmtFin.SF.2 = "numeric",
+                Bsmt.Unf.SF = "numeric",
+                Total.Bsmt.SF = "numeric",
+                Heating = "factor",
+                Heating.QC = "factor",
+                Central.Air = "factor",
+                Electrical = "factor",
+                X1st.Flr.SF = "numeric",
+              "X2nd.Flr.SF" = "numeric",
+                Low.Qual.Fin.SF = "numeric",
+                Gr.Liv.Area = "numeric",
+                Bsmt.Full.Bath = "factor", # Has NA's
+                Bsmt.Half.Bath = "factor", #
+                Full.Bath = "numeric",
+                Half.Bath = "numeric",
+                Bedroom.AbvGr = "numeric",
+                Kitchen.AbvGr = "numeric",
+                Kitchen.Qual = "factor",
+                TotRms.AbvGrd = "numeric",
+                Functional = "factor",
+                Fireplaces = "numeric",
+                Fireplace.Qu = "factor",
+                Garage.Type = "factor",
+                Garage.Yr.Blt = "numeric", #has NA
+                Garage.Finish = "factor",
+                Garage.Cars = "factor", #?
+                Garage.Area = "numeric",
+                Garage.Qual = "factor",
+                Garage.Cond = "factor",
+                Paved.Drive = "factor",
+                Wood.Deck.SF = "numeric",
+                Open.Porch.SF = "numeric",
+                Enclosed.Porch = "numeric",
+                "X3Ssn.Porch" = "numeric",
+                Screen.Porch = "numeric",
+                Pool.Area = "numeric",
+                Pool.QC = "factor",
+                Fence = "factor",
+                Misc.Feature = "factor",
+                Misc.Val = "numeric",
+                Mo.Sold = "factor",
+                Yr.Sold = "numeric",
+                Sale.Type = "factor",
+                Sale.Condition = "factor",
+                SalePrice = "numeric"
+                )
+house <- read.csv("AmesHousing.csv", na.strings = "", colClasses  = colClasses )
+house <- house[, !(colnames(house) %in% c("ï..Order", "PID"))]
+house_copy <- house
+house1 <- read.csv("AmesHousing.csv")
+sum(!complete.cases(house1))
+
+head(house1[is.na(house1$Lot.Frontage), c(5,8,74:79)])
+
+col_na <- names(house_copy)[sapply(house_copy, 
+                                   function(x){sum(!is.na(x) & x == "NA") >0})]
+
+
+na_desc <- NULL
+for (i in col_na){
+  na_desc <- c(na_desc, 
+               rep(i,sum(!is.na(house_copy[,i]) & house_copy[,i]=="NA")))
+}
+
+
+ggplot(aes(as.factor(na_desc), fill = as.factor(na_desc)), data = as.data.frame(na_desc)) + geom_bar() + ggtitle("NA values with description") + xlab("Columns with more than 4 NA") +theme(axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank())
+
+house[, col_na] <-data.frame(lapply(house[,col_na],
+                                    function(x)as.factor(ifelse(x == 'NA', "None", levels(x)[x]))))
+
+miss.col <- names(house)[sapply(house_copy, function(x){sum(is.na(x)) >0})]
+
+for(i in miss.col){
+  print(paste0(i, " has " , sum(is.na(house_copy[i])), " NAs"))
+}
+
+
+
+na_vec4 <- NULL
+for (i in miss.col){
+    if (sum(is.na(house_copy[i])) <= 4) 
+      na_vec4 <-c(na_vec4, rep("others",sum(is.na(house_copy[i]))))
+      
+    else 
+      na_vec4 <- c(na_vec4, rep(i,sum(is.na(house_copy[i]))))
+}
+
+ggplot(data = as.data.frame(na_vec4),
+       aes(as.factor(na_vec4), fill = as.factor(na_vec4))) + geom_bar() + 
+      ggtitle("Missing data chart") + 
+      xlab("Columns with more than 4 missing data") + 
+      theme(axis.title.x=element_blank(),
+            axis.text.x=element_blank(),
+            axis.ticks.x=element_blank())
+
+house$Mas.Vnr.Area[is.na(house$Mas.Vnr.Area)] <- 0
+house$Mas.Vnr.Type[is.na(house$Mas.Vnr.Type)] <- "None"
+
+garage <- (house_copy %>% dplyr::select(starts_with("Garage")))[is.na(house_copy$Garage.Yr.Blt),]
+head(garage)
+fac <- Filter(is.factor, garage)
+numer <- garage[, !(colnames(garage) %in% names(fac))]
+
+for (i in 1:nrow(house)){
+  if (is.na(house$Garage.Yr.Blt[i]) & 
+      house$Garage.Type[i]=="None" &
+      house$Garage.Finish[i] =="None" & house$Garage.Qual[i]=="None" & house$Garage.Cond[i] =="None" & house$Garage.Cars[i] ==0 & house$Garage.Area[i] ==0)
+    house$Garage.Yr.Blt[i] <- 0
+  else NA
+
+}
+(house %>% dplyr::select(starts_with("Garage")))[is.na(house$Garage.Yr.Blt),]
+
+
+for(i in miss.col){
+  print(paste0(i, " has " , sum(is.na(house[[i]])), " NAs"))
+}
+
+house$timeSale <- house$Yr.Sold -house$Year.Built
+house$timeGarage <- house$Yr.Sold - house$Garage.Yr.Blt
+house$timeremodel <- house$Yr.Sold- house$Year.Remod.Add
+#remove id, year built, year sold
+new_house <- house[, !(names(house) %in% c("Yr.Sold","Year.Built", "Garage.Yr.Blt", "Year.Remod.Add"))] 
+head(new_house[, 74:ncol(new_house)])
+
+fac_col <-Filter(is.factor,new_house)
+head(fac_col)
+numeric_col <- new_house[, !(colnames(new_house) %in% names(Filter(is.factor,new_house)))]
+head(numeric_col)
+
+
+missing <- as.integer(is.na(new_house$Lot.Frontage))
+table(missing)
+
+
+par(mfrow=c(7,4))
+par(mar=rep(1,4))
+
+for (i in colnames(numeric_col[,-c(1)])){
+  boxplot(numeric_col[,i]~ missing, ylab = i)
+}
+corrplot(cor(cbind(missing, numeric_col), use = "pairwise.complete.obs"), type = "upper", method = "color")
+
+
+temp <- cbind(missing, fac_col)
+par(mfrow=c(2,2))
+par(mar=rep(1,4))
+
+for (i in colnames(fac_col)[1:4]){
+plot(ggplot(aes( temp[,i], fill = as.factor(missing)), data = temp) +geom_bar( aes(as.integer(temp[,i]), ..prop..)))
+}
+```
+```
+
